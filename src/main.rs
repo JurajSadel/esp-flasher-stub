@@ -7,7 +7,10 @@ use flasher_stub::{
         clock::ClockControl,
         pac,
         prelude::*,
-        serial::{config::Config, TxRxPins},
+        serial::{
+            config::{Config, DataBits, Parity, StopBits},
+            TxRxPins,
+        },
         Serial,
         IO,
     },
@@ -34,12 +37,18 @@ fn main() -> ! {
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
     let pins = TxRxPins::new_tx_rx(
-        io.pins.gpio18.into_push_pull_output(),
-        io.pins.gpio9.into_floating_input(),
+        io.pins.gpio2.into_push_pull_output(),
+        io.pins.gpio1.into_floating_input(),
     );
 
-    let cfg = Config::default().baudrate(921_600);
-    let _ = Serial::new_with_config(peripherals.UART1, Some(cfg), Some(pins), &clocks);
+    let config = Config {
+        baudrate: 115200,
+        data_bits: DataBits::DataBits8,
+        parity: Parity::ParityNone,
+        stop_bits: StopBits::STOP1,
+    };
+
+    let _ = Serial::new_with_config(peripherals.UART1, Some(config), Some(pins), &clocks);
 
     let mut serial = Serial::new(peripherals.UART0);
 

@@ -14,5 +14,5 @@ PROVIDE( ets_efuse_get_spiconfig = 0x40008658 );
 PROVIDE( software_reset = 0x4000824c );
 PROVIDE( ets_delay_us = 0x40008534 );
 PROVIDE( tinfl_decompress = 0x4005ef30 );
-PROVIDE ( spi_read_status_high = 0x40062448 );
-PROVIDE ( spi_write_status = 0x400622f0 );
+PROVIDE( spi_read_status_high = 0x40062448 );
+PROVIDE( spi_write_status = 0x400622f0 );

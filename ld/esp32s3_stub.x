@@ -284,8 +284,7 @@ EXTERN(__default_naked_level_7_interrupt);
 
 /* Define output sections */
 SECTIONS {
-
-  .vectors :
+  .text : ALIGN(4)
   {
     . = 0x0;
     _init_start = ABSOLUTE(.);
@@ -379,12 +378,6 @@ SECTIONS {
     . = ALIGN(4);
     *(.noinit .noinit.*)
   } > RWDATA
-
-  .rwtext : ALIGN(4)
-  {
-    . = ALIGN (4);
-    *(.rwtext.literal .rwtext .rwtext.literal.* .rwtext.*)
-  } > RWTEXT
 
  /* must be last segment using RWTEXT */
   .text_heap_start (NOLOAD) : ALIGN(4)
