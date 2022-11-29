@@ -371,6 +371,4 @@ impl EspCommon for Esp32 {
     }
 }
 
-impl EspCommon for Esp32s3 {
-
-}
+impl EspCommon for Esp32s3 {}

@@ -334,33 +334,14 @@ SECTIONS {
 }
 
 SECTIONS {
-  .text : ALIGN(4)
-  {
-    _stext = .;
-    . = ALIGN (4);
-    _text_start = ABSOLUTE(.);
-    . = ALIGN (4);
-    *(.literal .text .literal.* .text.*)
-    _text_end = ABSOLUTE(.);
-    _etext = .;
-  } > ROTEXT
-
-  .rodata : ALIGN(4)
-  {
-    _rodata_start = ABSOLUTE(.);
-    . = ALIGN (4);
-    *(.rodata .rodata.*)
-    _rodata_end = ABSOLUTE(.);
-  } > RODATA
-
   .data : ALIGN(4)
   {
     _data_start = ABSOLUTE(.);
     . = ALIGN (4);
     *(.data .data.*)
-    *(.rodata .rodata.*) /* TODO: Added this line */
+    *(.rodata .rodata.*)
     _data_end = ABSOLUTE(.);
-  } > RWDATA AT > RODATA /* TODO: changed RODATA from RWTEXT */
+  } > RWDATA AT > RWTEXT
 
   /* LMA of .data */
   _sidata = LOADADDR(.data);
