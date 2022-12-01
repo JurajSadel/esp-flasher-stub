@@ -1,6 +1,7 @@
 PROVIDE( esp_rom_spiflash_erase_chip = 0x4000099c );
 PROVIDE( esp_rom_spiflash_erase_block = 0x40000a08 );
 PROVIDE( esp_rom_spiflash_erase_sector = 0x400009fc );
+PROVIDE( esp_rom_spiflash_erase_area = 0x40000a38 );
 PROVIDE( esp_rom_spiflash_write = 0x40000a14 );
 PROVIDE( esp_rom_spiflash_read = 0x40000a20 );
 PROVIDE( esp_rom_spiflash_write_encrypted = 0x4000096c );
@@ -9,7 +10,8 @@ PROVIDE( esp_rom_spiflash_write_encrypted_disable = 0x40000990 );
 PROVIDE( esp_rom_spiflash_attach = 0x40000aec );
 PROVIDE( esp_rom_spiflash_config_param = 0x40000a50 );
 PROVIDE( esp_rom_spiflash_wait_idle = 0x40000960 );
-PROVIDE ( esp_rom_spiflash_write_enable = 0x40000a44 ); /* ADDED */
+PROVIDE( esp_rom_spiflash_write_enable = 0x40000a44 );
+PROVIDE( esp_rom_spiflash_unlock = 0x40000a2c );
 PROVIDE( uart_tx_one_char = 0x40000648 );
 PROVIDE( uart_div_modify = 0x400006a8 );
 PROVIDE( ets_efuse_get_spiconfig = 0x40001f74 );

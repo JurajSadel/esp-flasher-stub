@@ -20,6 +20,7 @@ extern "C" {
     fn esp_rom_spiflash_erase_chip() -> i32;
     fn esp_rom_spiflash_erase_block(block_number: u32) -> i32;
     fn esp_rom_spiflash_erase_sector(sector_number: u32) -> i32;
+    fn esp_rom_spiflash_erase_area(start_addr: u32, len: u32) -> i32;
     fn esp_rom_spiflash_write(dest_addr: u32, data: *const u8, len: u32) -> i32;
     fn esp_rom_spiflash_read(src_addr: u32, data: *const u8, len: u32) -> i32;
     fn esp_rom_spiflash_unlock() -> i32;
@@ -44,8 +45,6 @@ extern "C" {
     fn esp_rom_spiflash_write_encrypted_disable();
     fn spi_write_status(chip: *const RomSpiFlashChip, status: u32) -> u32;
     fn esp_rom_spiflash_write_encrypted(dest_addr: u32, data: *const u8, len: u32) -> i32;
-    // fn spi_read_status_high(spi: *const RomSpiFlashChip, status: *const u32) ->
-    // u32;
     fn spi_read_status_high(status: *const u32) -> u32;
 }
 
@@ -117,7 +116,7 @@ pub trait EspCommon {
     }
 
     fn spi_set_params(&self, params: &SpiParams) -> Result<(), Error> {
-        let result = unsafe {
+        match unsafe {
             esp_rom_spiflash_config_param(
                 params.id,
                 params.total_size,
@@ -126,12 +125,9 @@ pub trait EspCommon {
                 params.page_size,
                 params.status_mask,
             )
-        };
-
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(FailedSpiOp)
+        } {
+            0 => Ok(()),
+            _ => Err(FailedSpiOp)
         }
     }
 
@@ -151,99 +147,41 @@ pub trait EspCommon {
         }
     }
 
-    // TODO: check erase_XX ROM functions
-    fn erase(&self, address: u32, block: bool) {
-        self.spiflash_wait_for_ready();
-        self.spi_write_enable();
-        self.wait_for_ready();
-
-        crate::dprintln!("Erase 1");
-
-        let command = if block {
-            Self::SPI_FLASH_BE
-        } else {
-            Self::SPI_FLASH_SE
-        };
-
-        crate::dprintln!("Erase 2");
-
-        self.write_register(Self::SPI_ADDR_REG, address);
-
-        crate::dprintln!("Erase 3");
-
-        self.write_register(Self::SPI_CMD_REG, command);
-
-        crate::dprintln!("Erase 4");
-
-        while self.read_register(Self::SPI_CMD_REG) != 0 {}
-
-        crate::dprintln!("Erase 5");
-
-        self.spiflash_wait_for_ready();
-    }
-
     fn wait_for_ready(&self) {
         while (self.read_register(Self::SPI_EXT2_REG) & Self::SPI_ST) != 0 {}
         while (self.read_register(Self::SPI0_EXT2_REG) & Self::SPI_ST) != 0 {} // ESP32_OR_LATER
     }
 
     fn spiflash_wait_for_ready(&self) {
-        // self.wait_for_ready();
-
-        // crate::dprintln!("spiflash_wait_for_ready 1");
-
-        // self.write_register(Self::SPI_RD_STATUS_REG, 0);
-        
-        // crate::dprintln!("spiflash_wait_for_ready 2");
-
-        // self.write_register(Self::SPI_CMD_REG, Self::SPI_FLASH_RDSR);
-
-        // crate::dprintln!("spiflash_wait_for_ready 3");
-
-        // while self.read_register(Self::SPI_CMD_REG) != 0 {}
-        
-        // crate::dprintln!("spiflash_wait_for_ready 4");
-        
-        //while (self.read_register(Self::SPI_RD_STATUS_REG) & Self::STATUS_WIP_BIT) != 0 {crate::dprintln!("register {:?}", self.read_register(Self::SPI_RD_STATUS_REG));}
         while unsafe { esp_rom_spiflash_wait_idle() } != 0 {} 
-
-        crate::dprintln!("spiflash_wait_for_ready 5");
     }
 
     fn spi_write_enable(&self) {
         self.write_register(Self::SPI_CMD_REG, Self::SPI_FLASH_WREN);
         while self.read_register(Self::SPI_CMD_REG) != 0 {}
-        //unsafe { esp_rom_spiflash_write_enable() };
+        //while unsafe { esp_rom_spiflash_write_enable() } != 0 {}
+        
     }
 
-    fn flash_erase_block(&self, address: u32) {
-        self.erase(address, true);
+    fn flash_erase_block(&self, address: u32) -> Result<(), Error> {
+        match unsafe { esp_rom_spiflash_erase_block(address / FLASH_BLOCK_SIZE) } {
+            0 => Ok(()),
+            _ => Err(EraseErr)
+        }
     }
 
-    fn flash_erase_sector(&self, address: u32) {
-        crate::dprintln!("flash_erase_sector");
-        self.erase(address, false);
+    fn flash_erase_sector(&self, address: u32) -> Result<(), Error> {
+        match unsafe { esp_rom_spiflash_erase_sector(address / FLASH_SECTOR_SIZE) } {
+            0 => Ok(()),
+            _ => Err(EraseErr)
+        }
     }
 
     fn erase_region(&self, address: u32, size: u32) -> Result<(), Error> {
-        if address % FLASH_SECTOR_SIZE != 0 {
-            return Err(Err0x32);
-        } else if size % FLASH_SECTOR_SIZE != 0 {
-            return Err(Err0x33);
-        } else if self.unlock_flash().is_err() {
-            return Err(Err0x34);
+        match unsafe { esp_rom_spiflash_erase_area(address, size) } {
+            0 => Ok(()),
+            _ => Err(EraseErr)
         }
-
-        let sector_start = address / FLASH_SECTOR_SIZE;
-        let sector_end = sector_start + (size / FLASH_SECTOR_SIZE);
-
-        for sector in sector_start..sector_end {
-            if unsafe { esp_rom_spiflash_erase_sector(sector) } != 0 {
-                return Err(Err0x35);
-            }
-        }
-
-        Ok(())
     }
 
     fn spi_flash_read(&self, address: u32, data: &mut [u8]) -> Result<(), Error> {
@@ -256,41 +194,11 @@ pub trait EspCommon {
         }
     }
 
-    fn unlock_flash(&self) -> Result<(), Error> { //here we go
-        let mut status: u32 = 0;
-        const STATUS_QIE_BIT: u32 = 1 << 9;
-        const SPI_WRSR_2B: u32 = 1 << 22;
-        const FLASHCHIP: *const RomSpiFlashChip = 0x3ffae270 as *const RomSpiFlashChip;
-
-        crate::dprintln!("fras2");
-        self.wait_for_ready();
-        crate::dprintln!("fras2.5");
-        if (unsafe { spi_read_status_high(&status) } != 0) {
-            crate::dprintln!("fras2.75");
-            return Err(FailedSpiUnlock);
+    fn unlock_flash(&self) -> Result<(), Error> {
+        match unsafe { esp_rom_spiflash_unlock() } {
+            0 => Ok(()),
+            _ => Err(FailedSpiUnlock), // TODO: add also timeout error
         }
-
-        // Clear all bits except QIE, if it is set.
-        // (This is different from ROM SPIUnlock, which keeps all bits as-is.)
-        status &= STATUS_QIE_BIT;
-
-        crate::dprintln!("fras3");
-
-        self.spi_write_enable();
-
-        crate::dprintln!("fras4");
-
-        self.set_register_mask(Self::SPI_CTRL_REG, SPI_WRSR_2B);
-
-        crate::dprintln!("fras5");
-
-        if (unsafe { spi_write_status(FLASHCHIP, status) } != 0) {
-            return Err(FailedSpiUnlock);
-        }
-
-        crate::dprintln!("fras6");
-
-        Ok(())
     }
 
     fn get_security_info(&self) -> Result<[u8; SECURITY_INFO_BYTES], Error> {
@@ -383,15 +291,7 @@ pub struct Esp32;
 #[derive(Default)]
 pub struct Esp32s3;
 
-impl EspCommon for Esp32c3 {
-    // fn unlock_flash(&self, ) -> Result<(), Error> {
-    //     if unsafe{ esp_rom_spiflash_unlock() } != 0 {
-    //         Err(FailedSpiUnlock)
-    //     } else {
-    //         Ok(())
-    //     }
-    // }
-}
+impl EspCommon for Esp32c3 {}
 
 impl EspCommon for Esp32 {
     const SPI_BASE_REG: u32 = 0x3ff42000;
@@ -406,41 +306,49 @@ impl EspCommon for Esp32 {
         Err(InvalidCommand)
     }
 
-    fn flash_erase_block(&self, address: u32) {
-        unsafe { esp_rom_spiflash_erase_block(address / FLASH_BLOCK_SIZE) };
-    }
+    fn unlock_flash(&self) -> Result<(), Error> {
+        let mut status: u32 = 0;
+        const STATUS_QIE_BIT: u32 = 1 << 9;
+        const SPI_WRSR_2B: u32 = 1 << 22;
+        const FLASHCHIP: *const RomSpiFlashChip = 0x3ffae270 as *const RomSpiFlashChip;
 
-    fn flash_erase_sector(&self, address: u32) {
-        unsafe { esp_rom_spiflash_erase_sector(address / FLASH_SECTOR_SIZE) };
+        self.wait_for_ready();
+
+        if (unsafe { spi_read_status_high(&status) } != 0) {
+            return Err(FailedSpiUnlock);
+        }
+
+        // Clear all bits except QIE, if it is set.
+        // (This is different from ROM SPIUnlock, which keeps all bits as-is.)
+        status &= STATUS_QIE_BIT;
+
+        self.spi_write_enable();
+        self.set_register_mask(Self::SPI_CTRL_REG, SPI_WRSR_2B);
+
+        if (unsafe { spi_write_status(FLASHCHIP, status) } != 0) {
+            return Err(FailedSpiUnlock);
+        }
+
+        Ok(())
     }
 }
 
-impl EspCommon for Esp32s3 {
-    //const ESP_ROM_SPIFLASH_UNLOCK: u32 = 0x40000a2c;
-    fn unlock_flash(&self, ) -> Result<(), Error> {
-        unsafe {
-            let esp_rom_spiflash_unlock: unsafe extern "C" fn() -> i32 =
-                core::mem::transmute(0x40000a2cu32);
-            esp_rom_spiflash_unlock();
-            Ok(())
-        }
-    }
-}
+impl EspCommon for Esp32s3 {}
 
-impl Esp32s3 {
-    fn esp_rom_spiflash_wait_idle() -> i32 {
-        unsafe {
-            let esp_rom_spiflash_wait_idle: unsafe extern "C" fn () -> i32 =
-                core::mem::transmute(0x40000960u32);
-            esp_rom_spiflash_wait_idle()
-        }
-    }
+// impl Esp32s3 {
+//     fn esp_rom_spiflash_wait_idle() -> i32 {
+//         unsafe {
+//             let esp_rom_spiflash_wait_idle: unsafe extern "C" fn () -> i32 =
+//                 core::mem::transmute(0x40000960u32);
+//             esp_rom_spiflash_wait_idle()
+//         }
+//     }
 
-    fn esp_rom_spiflash_write_enable() -> i32 {
-        unsafe {
-            let esp_rom_spiflash_write_enable: unsafe extern "C" fn () -> i32 =
-                core::mem::transmute(0x40000a44);
-            esp_rom_spiflash_write_enable()
-        }
-    }
-}
+//     fn esp_rom_spiflash_write_enable() -> i32 {
+//         unsafe {
+//             let esp_rom_spiflash_write_enable: unsafe extern "C" fn () -> i32 =
+//                 core::mem::transmute(0x40000a44);
+//             esp_rom_spiflash_write_enable()
+//         }
+//     }
+// }

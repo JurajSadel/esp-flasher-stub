@@ -38,7 +38,7 @@ fn main() -> ! {
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
     let pins = TxRxPins::new_tx_rx(
         io.pins.gpio2.into_push_pull_output(),
-        io.pins.gpio1.into_floating_input(),
+        io.pins.gpio0.into_floating_input(),
     );
 
     let config = Config {
