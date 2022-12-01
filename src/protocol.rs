@@ -129,8 +129,6 @@ impl<'a> Stub<'a> {
         self.decompressor.state = 0;
         self.in_flash_mode = true;
 
-        crate::dprintln!("fras1");
-
         match cmd.base.code {
             FlashBegin | FlashDeflBegin => {
                 if cmd.packet_size > MAX_WRITE_BLOCK {
@@ -152,7 +150,9 @@ impl<'a> Stub<'a> {
     ) -> Result<(), Error> {
         if !self.in_flash_mode {
             return Err(NotInFlashMode);
-        } else if self.remaining > 0 {
+        }
+        
+        if self.remaining > 0 {
             return Err(NotEnoughData);
         }
 
@@ -160,7 +160,7 @@ impl<'a> Stub<'a> {
 
         if cmd.run_user_code == 1 {
             self.send_response(&response);
-            self.target.delay_us(10000);
+            self.target.delay_us(10_000);
             self.target.soft_reset();
         }
 
@@ -170,12 +170,14 @@ impl<'a> Stub<'a> {
     fn process_mem_end(&mut self, cmd: &MemEndCommand, response: &Response) -> Result<(), Error> {
         if self.remaining != 0 {
             return Err(NotEnoughData);
-        } else if cmd.stay_in_stub == 0 {
+        }
+        
+        if cmd.stay_in_stub == 0 {
             self.send_response(&response);
-            self.target.delay_us(10000);
+            self.target.delay_us(10_000);
             (cmd.entrypoint)();
         }
-
+        
         Ok(())
     }
 
@@ -184,7 +186,9 @@ impl<'a> Stub<'a> {
 
         if data_len > self.remaining {
             return Err(TooMuchData);
-        } else if data_len % 4 != 0 {
+        } 
+        
+        if data_len % 4 != 0 {
             return Err(BadDataLen);
         }
 
@@ -200,31 +204,23 @@ impl<'a> Stub<'a> {
         Ok(())
     }
 
-    fn flash(&mut self, encrypted: bool, data: &[u8]) { //here
+    fn flash(&mut self, encrypted: bool, data: &[u8]) -> Result<(), Error> {
         let mut address = self.write_addr;
         let mut remaining = min(self.remaining, data.len() as u32);
         let mut written = 0;
-
-        crate::dprintln!("flash 1");
 
         // Erase flash
         while self.erase_addr < self.write_addr + remaining {
             if self.end_addr >= self.erase_addr + FLASH_BLOCK_SIZE
                 && self.erase_addr % FLASH_BLOCK_SIZE == 0
             {
-                crate::dprintln!("flash 1.3");
-                self.target.flash_erase_block(self.erase_addr);
-                crate::dprintln!("flash 1.4");
+                self.target.flash_erase_block(self.erase_addr)?;
                 self.erase_addr += FLASH_BLOCK_SIZE;
             } else {
-                crate::dprintln!("flash 1.5");
-                self.target.flash_erase_sector(self.erase_addr);
-                crate::dprintln!("flash 1.6");
+                self.target.flash_erase_sector(self.erase_addr)?;
                 self.erase_addr += FLASH_SECTOR_SIZE;
             }
         }
-
-        crate::dprintln!("flash 2");
 
         // Write flash
         while remaining > 0 {
@@ -248,13 +244,15 @@ impl<'a> Stub<'a> {
 
         self.write_addr += written as u32;
         self.remaining -= min(self.remaining, written as u32);
+
+        Ok(())
     }
 
-    fn flash_data(&mut self, data: &[u8]) {
-        self.flash(false, data);
+    fn flash_data(&mut self, data: &[u8]) -> Result<(), Error> {
+        Ok(self.flash(false, data)?) // NOT SURE
     }
 
-    fn flash_defl_data(&mut self, data: &[u8]) { //HERE
+    fn flash_defl_data(&mut self, data: &[u8]) -> Result<(), Error> {
         use crate::miniz_types::TinflStatus::*;
 
         const OUT_BUFFER_SIZE: usize = 0x8000; // 32768;
@@ -268,15 +266,10 @@ impl<'a> Stub<'a> {
         let mut status = NeedsMoreInput;
         let mut flags = TINFL_FLAG_PARSE_ZLIB_HEADER;
 
-
-        crate::dprintln!("defl_data 1");
         while length > 0 && self.remaining > 0 && status != Done {
             let mut in_bytes = length;
             let mut out_bytes = out_buf.len() - out_index;
             let next_out: *mut u8 = out_buf[out_index..].as_mut_ptr();
-
-            crate::dprintln!("defl_data 2");
-
             
             if self.remaining_compressed > length {
                 flags |= TINFL_FLAG_HAS_MORE_INPUT;
@@ -292,24 +285,16 @@ impl<'a> Stub<'a> {
                 flags,
             );
 
-            crate::dprintln!("defl_data 3");
-
             self.remaining_compressed -= in_bytes;
             length -= in_bytes;
             in_index += in_bytes;
             out_index += out_bytes;
 
-            crate::dprintln!("defl_data 3.5");
-
             if status == Done || out_index == OUT_BUFFER_SIZE {
-                crate::dprintln!("defl_data 3.7");
-                self.flash_data(&out_buf[..out_index]);
-                crate::dprintln!("defl_data 3.8");
+                self.flash_data(&out_buf[..out_index])?;
                 out_index = 0;
             }
         }
-
-        crate::dprintln!("defl_data 4");
 
         unsafe { DECOMPRESS_INDEX = out_index };
 
@@ -321,12 +306,16 @@ impl<'a> Stub<'a> {
         } else if status != Done && self.remaining == 0 {
             self.last_error = Some(TooMuchData);
         }
+
+        Ok(())
     }
 
-    fn flash_encrypt_data(&mut self, data: &[u8]) {
+    fn flash_encrypt_data(&mut self, data: &[u8]) -> Result<(), Error> {
         self.target.write_encrypted_enable();
-        self.flash(true, data);
+        self.flash(true, data)?;
         self.target.write_encrypted_disable();
+
+        Ok(())
     }
 
     fn process_data(
@@ -335,35 +324,29 @@ impl<'a> Stub<'a> {
         data: &[u8],
         response: &Response,
     ) -> Result<(), Error> {
-        let checksum: u8 = data.iter().fold(0xEF, |acc, x| acc ^ x);
-
-        crate::dprintln!("frasnica V2.1");
-
         if !self.in_flash_mode {
             return Err(NotInFlashMode);
-        } else if cmd.size != data.len() as u32 {
+        }
+        
+        let checksum: u8 = data.iter().fold(0xEF, |acc, x| acc ^ x);
+        
+        if cmd.size != data.len() as u32 {
             return Err(BadDataLen);
-        } else if cmd.base.checksum != checksum as u32 {
+        }
+        
+        if cmd.base.checksum != checksum as u32 {
             return Err(BadDataChecksum);
         }
         
-        crate::dprintln!("frasnica V2.2");
-        
         self.send_response(&response);
-
-        crate::dprintln!("frasnica V2.3 {:?}", cmd.base.code);
 
         match cmd.base.code {
             FlashEncryptedData => self.flash_encrypt_data(data),
             FlashDeflData => self.flash_defl_data(data),
             FlashData => self.flash_data(data),
-            MemData => self.write_ram(data)?,
-            _ => (),
+            MemData => self.write_ram(data),
+            _ => Ok(()),
         }
-
-        crate::dprintln!("frasnica V2.4");
-
-        Ok(())
     }
 
     fn process_read_flash(&mut self, params: &ReadFlashParams) -> Result<(), Error> {
@@ -423,16 +406,13 @@ impl<'a> Stub<'a> {
                 self.target.write_register(reg.address, reg.value);
             }
             FlashBegin | MemBegin | FlashDeflBegin => {
-                crate::dprintln!("fras ");
                 let cmd: BeginCommand = slice_to_struct(payload)?;
                 self.process_begin(&cmd)? //here crashed the S3 chip
             }
             FlashData | FlashDeflData | FlashEncryptedData | MemData => {
-                crate::dprintln!("frasnica 1");
                 let cmd: DataCommand = slice_to_struct(&payload)?;
                 let data = &payload[DATA_CMD_SIZE..];
                 self.process_data(&cmd, data, &response)?;
-                crate::dprintln!("frasnica 2");
                 response_sent = true;
             }
             FlashEnd | FlashDeflEnd => {
@@ -460,7 +440,7 @@ impl<'a> Stub<'a> {
             ChangeBaudrate => {
                 let baud: ChangeBaudrateCommand = slice_to_struct(payload)?;
                 self.send_response(&response);
-                self.target.delay_us(10000); // Wait for response to be transfered
+                self.target.delay_us(10_000); // Wait for response to be transfered
                 self.target.change_baudrate(baud.old, baud.new);
                 self.send_greeting();
                 response_sent = true;

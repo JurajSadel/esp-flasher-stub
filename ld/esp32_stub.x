@@ -126,6 +126,94 @@ SECTIONS {
     . = ALIGN(4);
     *(.rtc_slow.noinit .rtc_slow.noinit.*)
   } > rtc_slow_seg
+
+  .text : ALIGN(4)
+  {
+    /* Vector table */
+    . = 0x0;
+    _init_start = ABSOLUTE(.);
+    . = 0x00000000 ;
+    KEEP(*(.WindowOverflow4.text));
+    . = 0x00000040;
+    KEEP(*(.WindowUnderflow4.text));
+    . = 0x00000080;
+    KEEP(*(.WindowOverflow8.text));
+    . = 0x000000C0;
+    KEEP(*(.WindowUnderflow8.text));
+    . = 0x00000100;
+    KEEP(*(.WindowOverflow12.text));
+    . = 0x00000140;
+    KEEP(*(.WindowUnderflow12.text));
+    . = 0x00000180;
+    KEEP(*(.Level2InterruptVector.text));
+    . = 0x000001C0;
+    KEEP(*(.Level3InterruptVector.text));
+    . = 0x00000200;
+    KEEP(*(.Level4InterruptVector.text));
+    . = 0x00000240;
+    KEEP(*(.Level5InterruptVector.text));
+    . = 0x00000280;
+    KEEP(*(.DebugExceptionVector.text));
+    . = 0x000002C0;
+    KEEP(*(.NMIExceptionVector.text));
+    . = 0x00000300;
+    KEEP(*(.KernelExceptionVector.text));
+    . = 0x00000340;
+    KEEP(*(.UserExceptionVector.text));
+    . = 0x000003C0;
+    KEEP(*(.DoubleExceptionVector.text));
+    . = 0x400;
+    _init_end = ABSOLUTE(.);
+
+    _stext = .;
+    . = ALIGN (4);
+    _text_start = ABSOLUTE(.);
+    . = ALIGN (4);
+    *(.literal .text .literal.* .text.*)
+    _text_end = ABSOLUTE(.);
+    _etext = .;
+    *(.rwtext.literal .rwtext .rwtext.literal.* .rwtext.*)
+  } > RWTEXT
+
+  .data : ALIGN(4)
+  {
+    _data_start = ABSOLUTE(.);
+    . = ALIGN (4);
+    *(.data .data.*)
+    *(.rodata .rodata.*)
+    _data_end = ABSOLUTE(.);
+  } > RWDATA AT > RWTEXT
+
+  /* LMA of .data */
+  _sidata = LOADADDR(.data);
+
+  .bss (NOLOAD) : ALIGN(4)
+  {
+    _bss_start = ABSOLUTE(.);
+    . = ALIGN (4);
+    *(.bss .bss.* COMMON)
+    _bss_end = ABSOLUTE(.);
+  } > RWDATA
+
+  .noinit (NOLOAD) : ALIGN(4)
+  {
+    . = ALIGN(4);
+    *(.noinit .noinit.*)
+  } > RWDATA
+
+ /* must be last segment using RWTEXT */
+  .text_heap_start (NOLOAD) : ALIGN(4)
+  {
+    . = ALIGN (4);
+    _text_heap_start = ABSOLUTE(.);
+  } > RWTEXT
+
+ /* must be last segment using RWDATA */
+  .heap_start (NOLOAD) : ALIGN(4)
+  {
+    . = ALIGN (4);
+    _heap_start = ABSOLUTE(.);
+  } > RWDATA
 } 
 
 _heap_end = ABSOLUTE(ORIGIN(dram_seg))+LENGTH(dram_seg)+LENGTH(reserved_for_boot_seg) - 2*STACK_SIZE;
@@ -238,6 +326,13 @@ PROVIDE(__naked_level_5_interrupt = __default_naked_level_5_interrupt);
 PROVIDE(__naked_level_6_interrupt = __default_naked_level_6_interrupt);
 PROVIDE(__naked_level_7_interrupt = __default_naked_level_7_interrupt);
 
+PROVIDE(level1_interrupt = DefaultHandler);
+PROVIDE(level2_interrupt = DefaultHandler);
+PROVIDE(level3_interrupt = DefaultHandler);
+PROVIDE(level4_interrupt = DefaultHandler);
+PROVIDE(level5_interrupt = DefaultHandler);
+PROVIDE(level6_interrupt = DefaultHandler);
+PROVIDE(level7_interrupt = DefaultHandler);
 
 /* needed to force inclusion of the vectors */
 EXTERN(__default_exception);
@@ -252,102 +347,3 @@ EXTERN(__default_naked_level_4_interrupt);
 EXTERN(__default_naked_level_5_interrupt);
 EXTERN(__default_naked_level_6_interrupt);
 EXTERN(__default_naked_level_7_interrupt);
-
-
-SECTIONS {
-  .text : ALIGN(4)
-  {
-    /* Vector table */
-    . = 0x0;
-    _init_start = ABSOLUTE(.);
-    . = 0x00000000 ;
-    KEEP(*(.WindowOverflow4.text));
-    . = 0x00000040;
-    KEEP(*(.WindowUnderflow4.text));
-    . = 0x00000080;
-    KEEP(*(.WindowOverflow8.text));
-    . = 0x000000C0;
-    KEEP(*(.WindowUnderflow8.text));
-    . = 0x00000100;
-    KEEP(*(.WindowOverflow12.text));
-    . = 0x00000140;
-    KEEP(*(.WindowUnderflow12.text));
-    . = 0x00000180;
-    KEEP(*(.Level2InterruptVector.text));
-    . = 0x000001C0;
-    KEEP(*(.Level3InterruptVector.text));
-    . = 0x00000200;
-    KEEP(*(.Level4InterruptVector.text));
-    . = 0x00000240;
-    KEEP(*(.Level5InterruptVector.text));
-    . = 0x00000280;
-    KEEP(*(.DebugExceptionVector.text));
-    . = 0x000002C0;
-    KEEP(*(.NMIExceptionVector.text));
-    . = 0x00000300;
-    KEEP(*(.KernelExceptionVector.text));
-    . = 0x00000340;
-    KEEP(*(.UserExceptionVector.text));
-    . = 0x000003C0;
-    KEEP(*(.DoubleExceptionVector.text));
-    . = 0x400;
-    _init_end = ABSOLUTE(.);
-
-    _stext = .;
-    . = ALIGN (4);
-    _text_start = ABSOLUTE(.);
-    . = ALIGN (4);
-    *(.literal .text .literal.* .text.*)
-    _text_end = ABSOLUTE(.);
-    _etext = .;
-    *(.rwtext.literal .rwtext .rwtext.literal.* .rwtext.*)
-  } > RWTEXT
-
-  .data : ALIGN(4)
-  {
-    _data_start = ABSOLUTE(.);
-    . = ALIGN (4);
-    *(.data .data.*)
-    *(.rodata .rodata.*)
-    _data_end = ABSOLUTE(.);
-  } > RWDATA AT > RWTEXT
-
-  /* LMA of .data */
-  _sidata = LOADADDR(.data);
-
-  .bss (NOLOAD) : ALIGN(4)
-  {
-    _bss_start = ABSOLUTE(.);
-    . = ALIGN (4);
-    *(.bss .bss.* COMMON)
-    _bss_end = ABSOLUTE(.);
-  } > RWDATA
-
-  .noinit (NOLOAD) : ALIGN(4)
-  {
-    . = ALIGN(4);
-    *(.noinit .noinit.*)
-  } > RWDATA
-
- /* must be last segment using RWTEXT */
-  .text_heap_start (NOLOAD) : ALIGN(4)
-  {
-    . = ALIGN (4);
-    _text_heap_start = ABSOLUTE(.);
-  } > RWTEXT
-
- /* must be last segment using RWDATA */
-  .heap_start (NOLOAD) : ALIGN(4)
-  {
-    . = ALIGN (4);
-    _heap_start = ABSOLUTE(.);
-  } > RWDATA
-}
-
-PROVIDE(level1_interrupt = DefaultHandler);
-PROVIDE(level2_interrupt = DefaultHandler);
-PROVIDE(level3_interrupt = DefaultHandler);
-PROVIDE(level4_interrupt = DefaultHandler);
-PROVIDE(level5_interrupt = DefaultHandler);
-PROVIDE(level6_interrupt = DefaultHandler);
-PROVIDE(level7_interrupt = DefaultHandler);

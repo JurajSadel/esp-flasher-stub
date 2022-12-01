@@ -15,6 +15,9 @@ struct RomSpiFlashChip {
     status_mask: u32,
 }
 
+// ROM SPIFLASH functions can be found here:
+// https://github.com/espressif/esp-idf/tree/master/components/esp_rom or
+// https://github.com/espressif/esptool/tree/master/flasher_stub/ld
 #[allow(unused)]
 extern "C" {
     fn esp_rom_spiflash_erase_chip() -> i32;
@@ -34,7 +37,6 @@ extern "C" {
         status_mask: u32,
     ) -> u32;
     fn esp_rom_spiflash_wait_idle() -> i32;
-    fn esp_rom_spiflash_write_enable() -> i32;
     fn uart_tx_one_char(byte: u8);
     fn uart_div_modify(uart_number: u32, baud_div: u32);
     fn ets_efuse_get_spiconfig() -> u32;
@@ -127,7 +129,7 @@ pub trait EspCommon {
             )
         } {
             0 => Ok(()),
-            _ => Err(FailedSpiOp)
+            _ => Err(FailedSpiOp),
         }
     }
 
@@ -159,28 +161,26 @@ pub trait EspCommon {
     fn spi_write_enable(&self) {
         self.write_register(Self::SPI_CMD_REG, Self::SPI_FLASH_WREN);
         while self.read_register(Self::SPI_CMD_REG) != 0 {}
-        //while unsafe { esp_rom_spiflash_write_enable() } != 0 {}
-        
     }
 
     fn flash_erase_block(&self, address: u32) -> Result<(), Error> {
         match unsafe { esp_rom_spiflash_erase_block(address / FLASH_BLOCK_SIZE) } {
             0 => Ok(()),
-            _ => Err(EraseErr)
+            _ => Err(EraseErr),
         }
     }
 
     fn flash_erase_sector(&self, address: u32) -> Result<(), Error> {
         match unsafe { esp_rom_spiflash_erase_sector(address / FLASH_SECTOR_SIZE) } {
             0 => Ok(()),
-            _ => Err(EraseErr)
+            _ => Err(EraseErr),
         }
     }
 
     fn erase_region(&self, address: u32, size: u32) -> Result<(), Error> {
         match unsafe { esp_rom_spiflash_erase_area(address, size) } {
             0 => Ok(()),
-            _ => Err(EraseErr)
+            _ => Err(EraseErr),
         }
     }
 
@@ -306,6 +306,8 @@ impl EspCommon for Esp32 {
         Err(InvalidCommand)
     }
 
+    // the ROM function has been replaced with patched code so we have to "override" it 
+    // https://github.com/espressif/esp-idf/blob/master/components/esp_rom/esp32/ld/esp32.rom.spiflash.ld#L23
     fn unlock_flash(&self) -> Result<(), Error> {
         let mut status: u32 = 0;
         const STATUS_QIE_BIT: u32 = 1 << 9;
@@ -334,21 +336,3 @@ impl EspCommon for Esp32 {
 }
 
 impl EspCommon for Esp32s3 {}
-
-// impl Esp32s3 {
-//     fn esp_rom_spiflash_wait_idle() -> i32 {
-//         unsafe {
-//             let esp_rom_spiflash_wait_idle: unsafe extern "C" fn () -> i32 =
-//                 core::mem::transmute(0x40000960u32);
-//             esp_rom_spiflash_wait_idle()
-//         }
-//     }
-
-//     fn esp_rom_spiflash_write_enable() -> i32 {
-//         unsafe {
-//             let esp_rom_spiflash_write_enable: unsafe extern "C" fn () -> i32 =
-//                 core::mem::transmute(0x40000a44);
-//             esp_rom_spiflash_write_enable()
-//         }
-//     }
-// }
